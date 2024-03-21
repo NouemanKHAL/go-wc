@@ -11,14 +11,24 @@ import (
 
 var countBytes bool
 var countLines bool
+var countWords bool
 
 func main() {
 	flag.BoolVar(&countBytes, "c", false, "print the bytes count")
 	flag.BoolVar(&countLines, "l", false, "print the lines count")
+	flag.BoolVar(&countWords, "w", false, "print the words count")
 	flag.Parse()
 
-	var bytesResults []int
-	var linesResults []int
+	// default behavior of wc
+	if !countBytes && !countLines && !countWords {
+		countBytes = true
+		countLines = true
+		countWords = true
+	}
+
+	var bytesResults []int64
+	var linesResults []int64
+	var wordsResults []int64
 	var filenames []string
 
 	for _, filename := range flag.Args() {
@@ -30,29 +40,55 @@ func main() {
 		filenames = append(filenames, filename)
 		defer file.Close()
 
-		bytesCount := 0
-		linesCount := 0
+		// init counters
+		bytesCount := int64(0)
+		linesCount := int64(0)
+		wordsCount := int64(0)
 
-		scanner := bufio.NewScanner(file)
-		scanner.Split(bufio.ScanBytes)
-
-		for scanner.Scan() {
-			b := scanner.Bytes()
-			if string(b[0]) == "\n" {
-				linesCount += 1
+		if countBytes {
+			stat, err := os.Stat(filename)
+			if err != nil {
+				os.Stderr.WriteString(err.Error())
+				break
 			}
-			bytesCount += 1
+			bytesCount = stat.Size()
+			bytesResults = append(bytesResults, bytesCount)
 		}
 
-		bytesResults = append(bytesResults, bytesCount)
-		linesResults = append(linesResults, linesCount)
+		if countLines {
+			scanner := bufio.NewScanner(file)
+			scanner.Split(bufio.ScanLines)
+			for scanner.Scan() {
+				linesCount += 1
+			}
+			linesResults = append(linesResults, linesCount)
+		}
+
+		if countWords {
+			// rewind the file cursor to the beginning
+			file.Seek(0, 0)
+
+			wordScanner := bufio.NewScanner(file)
+			wordScanner.Split(bufio.ScanWords)
+
+			for wordScanner.Scan() {
+				wordsCount += 1
+			}
+			wordsResults = append(wordsResults, wordsCount)
+		}
 	}
 
 	if len(filenames) > 0 {
-		var maxValue int
+		var maxValue int64
 		if countLines {
 			maxValue = slices.Max(linesResults)
-		} else if countBytes {
+		}
+
+		if countWords {
+			maxValue = slices.Max(wordsResults)
+		}
+
+		if countBytes {
 			maxValue = slices.Max(bytesResults)
 		}
 
@@ -66,7 +102,9 @@ func main() {
 			if countLines {
 				output += fmt.Sprintf("%*d ", colSize, linesResults[i])
 			}
-
+			if countWords {
+				output += fmt.Sprintf("%*d ", colSize, wordsResults[i])
+			}
 			if countBytes {
 				output += fmt.Sprintf("%*d ", colSize, bytesResults[i])
 			}
