@@ -34,6 +34,8 @@ func GetFileStats(name string, f *os.File) FileStats {
 		} else {
 			charsCnt += 1
 		}
+		// ReadBytes returns err != nil if and only if the returned data does not end in delim ('\n').
+		// Thus, we need to update all counters except the lines one before checking if err != nil
 		if err != nil {
 			break
 		}

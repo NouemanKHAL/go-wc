@@ -23,6 +23,7 @@ type FileStats struct {
 	Chars    int64
 	Filename string
 }
+
 type Result struct {
 	FilesStats []FileStats
 }
@@ -32,7 +33,10 @@ func (r *Result) getColumnSize() int {
 	for _, fs := range r.FilesStats {
 		maxValue = max(maxValue, fs.Bytes, fs.Lines, fs.Words, fs.Chars)
 	}
-	columnSize := (int)(math.Floor(math.Log10((float64)(maxValue))))
+
+	// column size is the length of the largest value in the output
+	// columnSize = floor(log10(max)) + 1
+	columnSize := (int)(math.Floor(math.Log10((float64)(maxValue)))) + 1
 	return max(7, columnSize)
 }
 
