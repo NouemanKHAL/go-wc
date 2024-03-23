@@ -52,7 +52,6 @@ func GetFileStats(name string, f *os.File) FileStats {
 func Run(cmdArgs []string) Result {
 	var result Result
 
-	// no input ->
 	if len(cmdArgs) == 0 {
 		fs := GetFileStats("", os.Stdin)
 		result.FilesStats = append(result.FilesStats, fs)
@@ -75,10 +74,10 @@ func Run(cmdArgs []string) Result {
 }
 
 func main() {
-	bytesFlag := flag.Bool("c", false, "print the bytes")
-	linesFlag := flag.Bool("l", false, "print the lines")
-	wordsFlag := flag.Bool("w", false, "print the words")
-	charsFlag := flag.Bool("m", false, "print the characters")
+	bytesFlag := flag.Bool("c", false, "print the bytes count")
+	linesFlag := flag.Bool("l", false, "print the lines count")
+	wordsFlag := flag.Bool("w", false, "print the words count")
+	charsFlag := flag.Bool("m", false, "print the characters count")
 
 	flag.Parse()
 
