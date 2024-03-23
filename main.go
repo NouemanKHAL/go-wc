@@ -2,18 +2,99 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"math"
 	"os"
-	"slices"
-	"strings"
+	"unicode/utf8"
 )
 
 var countBytes bool
 var countLines bool
 var countWords bool
 var countChars bool
+
+type Row struct {
+	Bytes    int
+	Lines    int
+	Words    int
+	Chars    int
+	Filename string
+}
+
+type Result struct {
+	Rows []Row
+}
+
+func (r *Result) getColumnSize() int {
+	var maxValue int
+	for _, row := range r.Rows {
+		maxValue = max(row.Bytes, row.Lines, row.Words, row.Chars)
+	}
+	// to avoid -inf values when maxValue is 0
+	maxValue = max(maxValue, 1)
+	colSize := (int)(math.Floor(math.Log10((float64)(maxValue)))) + 1
+	return colSize
+}
+
+func (r *Result) String() string {
+	result := bytes.Buffer{}
+	colSize := r.getColumnSize()
+	for _, row := range r.Rows {
+		output := ""
+		if countLines {
+			output += fmt.Sprintf("%*d ", colSize, row.Lines)
+		}
+		if countWords {
+			output += fmt.Sprintf("%*d ", colSize, row.Words)
+		}
+		if countChars {
+			output += fmt.Sprintf("%*d ", colSize, row.Chars)
+		}
+		if countBytes {
+			output += fmt.Sprintf("%*d ", colSize, row.Bytes)
+		}
+		result.WriteString(fmt.Sprintf("%s%s\n", output, row.Filename))
+	}
+	return result.String()
+}
+
+func GetFileStats(name string, f *os.File) Row {
+	bytesCount := 0
+	linesCount := 0
+	wordsCount := 0
+	charsCount := 0
+
+	locale := os.Getenv("LC_CTYPE")
+	if locale == "" {
+		locale = "UTF-8"
+	}
+
+	r := bufio.NewReader(f)
+	for {
+		data, err := r.ReadBytes('\n')
+		bytesCount += len(data)
+		wordsCount += len(bytes.Fields(data))
+		if locale == "UTF-8" {
+			charsCount += utf8.RuneCount(data)
+		} else {
+			charsCount += 1
+		}
+		if err != nil {
+			break
+		}
+		linesCount += 1
+	}
+
+	return Row{
+		Lines:    linesCount,
+		Words:    wordsCount,
+		Chars:    charsCount,
+		Bytes:    bytesCount,
+		Filename: name,
+	}
+}
 
 func main() {
 	flag.BoolVar(&countBytes, "c", false, "print the bytes count")
@@ -29,12 +110,11 @@ func main() {
 		countWords = true
 	}
 
-	var bytesResults []int64
-	var linesResults []int64
-	var wordsResults []int64
-	var charsResults []int64
-
-	var filenames []string
+	var result Result
+	if len(flag.Args()) == 0 {
+		row := GetFileStats("", os.Stdin)
+		result.Rows = append(result.Rows, row)
+	}
 
 	for _, filename := range flag.Args() {
 		file, err := os.Open(filename)
@@ -42,103 +122,10 @@ func main() {
 			os.Stderr.WriteString(err.Error())
 			break
 		}
-		filenames = append(filenames, filename)
 		defer file.Close()
 
-		// init counters
-		bytesCount := int64(0)
-		linesCount := int64(0)
-		wordsCount := int64(0)
-		charsCount := int64(0)
-
-		var stat os.FileInfo
-		stat, err = os.Stat(filename)
-		if err != nil {
-			os.Stderr.WriteString(err.Error())
-			break
-		}
-
-		if countBytes {
-			bytesCount = stat.Size()
-			bytesResults = append(bytesResults, bytesCount)
-		}
-
-		if countLines {
-			scanner := bufio.NewScanner(file)
-			scanner.Split(bufio.ScanLines)
-			for scanner.Scan() {
-				linesCount += 1
-			}
-			linesResults = append(linesResults, linesCount)
-		}
-
-		if countWords {
-			// rewind the file cursor to the beginning
-			file.Seek(0, 0)
-
-			wordScanner := bufio.NewScanner(file)
-			wordScanner.Split(bufio.ScanWords)
-
-			for wordScanner.Scan() {
-				wordsCount += 1
-			}
-			wordsResults = append(wordsResults, wordsCount)
-		}
-
-		if countChars {
-			locale := os.Getenv("LC_CTYPE")
-			if !strings.Contains(locale, "UTF") {
-				charsCount = stat.Size()
-			} else {
-				file.Seek(0, 0)
-				scanner := bufio.NewScanner(file)
-				scanner.Split(bufio.ScanRunes)
-				for scanner.Scan() {
-					charsCount += 1
-				}
-			}
-			charsResults = append(charsResults, charsCount)
-		}
+		row := GetFileStats(filename, file)
+		result.Rows = append(result.Rows, row)
 	}
-
-	if len(filenames) > 0 {
-		var maxValue int64
-		if countLines {
-			maxValue = slices.Max(linesResults)
-		}
-
-		if countWords {
-			maxValue = slices.Max(wordsResults)
-		}
-
-		if countBytes {
-			maxValue = slices.Max(bytesResults)
-		}
-
-		if countChars {
-			maxValue = slices.Max(charsResults)
-		}
-
-		// to avoid -inf values when maxValue is 0
-		maxValue = max(maxValue, 1)
-		colSize := (int)(math.Floor(math.Log10((float64)(maxValue)))) + 1
-
-		for i, filename := range filenames {
-			output := ""
-
-			if countLines {
-				output += fmt.Sprintf("%*d ", colSize, linesResults[i])
-			}
-			if countWords {
-				output += fmt.Sprintf("%*d ", colSize, wordsResults[i])
-			}
-			if countChars {
-				output += fmt.Sprintf("%*d ", colSize, charsResults[i])
-			}
-			if countBytes {
-				output += fmt.Sprintf("%*d ", colSize, bytesResults[i])
-			}
-			fmt.Printf("%s%s\n", output, filename)
-		}
-	}
+	fmt.Print(result.String())
 }
