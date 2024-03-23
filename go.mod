@@ -1,3 +1,3 @@
-module github.com/NouemanKHAL/coding-challenges/wc
+module github.com/NouemanKHAL/go-wc
 
 go 1.21.5
