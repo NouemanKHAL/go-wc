@@ -7,30 +7,26 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"unicode/utf8"
 )
 
-var countBytes bool
-var countLines bool
-var countWords bool
-var countChars bool
-
-type Row struct {
-	Bytes    int
-	Lines    int
-	Words    int
-	Chars    int
+type FileStats struct {
+	Bytes    int64
+	Lines    int64
+	Words    int64
+	Chars    int64
 	Filename string
 }
 
 type Result struct {
-	Rows []Row
+	FilesStats []FileStats
 }
 
 func (r *Result) getColumnSize() int {
-	var maxValue int
-	for _, row := range r.Rows {
-		maxValue = max(row.Bytes, row.Lines, row.Words, row.Chars)
+	var maxValue int64
+	for _, fs := range r.FilesStats {
+		maxValue = max(fs.Bytes, fs.Lines, fs.Words, fs.Chars)
 	}
 	// to avoid -inf values when maxValue is 0
 	maxValue = max(maxValue, 1)
@@ -40,44 +36,46 @@ func (r *Result) getColumnSize() int {
 
 func (r *Result) String() string {
 	result := bytes.Buffer{}
-	colSize := r.getColumnSize()
-	for _, row := range r.Rows {
-		output := ""
+	columnSize := r.getColumnSize()
+	for _, fs := range r.FilesStats {
 		if countLines {
-			output += fmt.Sprintf("%*d ", colSize, row.Lines)
+			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Lines))
 		}
 		if countWords {
-			output += fmt.Sprintf("%*d ", colSize, row.Words)
+			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Words))
 		}
 		if countChars {
-			output += fmt.Sprintf("%*d ", colSize, row.Chars)
+			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Chars))
 		}
 		if countBytes {
-			output += fmt.Sprintf("%*d ", colSize, row.Bytes)
+			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Bytes))
 		}
-		result.WriteString(fmt.Sprintf("%s%s\n", output, row.Filename))
+		result.WriteString(fmt.Sprintf("%s\n", fs.Filename))
 	}
 	return result.String()
 }
 
-func GetFileStats(name string, f *os.File) Row {
-	bytesCount := 0
-	linesCount := 0
-	wordsCount := 0
-	charsCount := 0
+func GetFileStats(name string, f *os.File) FileStats {
+	var bytesCount int64
+	var linesCount int64
+	var wordsCount int64
+	var charsCount int64
 
 	locale := os.Getenv("LC_CTYPE")
 	if locale == "" {
 		locale = "UTF-8"
 	}
 
+	// TODO: support other character encodings
+	isMultiBytes := strings.Contains(locale, "UTF")
+
 	r := bufio.NewReader(f)
 	for {
 		data, err := r.ReadBytes('\n')
-		bytesCount += len(data)
-		wordsCount += len(bytes.Fields(data))
-		if locale == "UTF-8" {
-			charsCount += utf8.RuneCount(data)
+		bytesCount += int64(len(data))
+		wordsCount += int64(len(bytes.Fields(data)))
+		if isMultiBytes {
+			charsCount += int64(utf8.RuneCount(data))
 		} else {
 			charsCount += 1
 		}
@@ -87,7 +85,7 @@ func GetFileStats(name string, f *os.File) Row {
 		linesCount += 1
 	}
 
-	return Row{
+	return FileStats{
 		Lines:    linesCount,
 		Words:    wordsCount,
 		Chars:    charsCount,
@@ -95,6 +93,32 @@ func GetFileStats(name string, f *os.File) Row {
 		Filename: name,
 	}
 }
+
+func Run(args []string) Result {
+	var result Result
+	if len(args) == 0 {
+		fs := GetFileStats("", os.Stdin)
+		result.FilesStats = append(result.FilesStats, fs)
+	} else {
+		for _, filename := range args {
+			file, err := os.Open(filename)
+			if err != nil {
+				os.Stderr.WriteString(err.Error())
+				break
+			}
+			defer file.Close()
+
+			fs := GetFileStats(filename, file)
+			result.FilesStats = append(result.FilesStats, fs)
+		}
+	}
+	return result
+}
+
+var countBytes bool
+var countLines bool
+var countWords bool
+var countChars bool
 
 func main() {
 	flag.BoolVar(&countBytes, "c", false, "print the bytes count")
@@ -104,28 +128,12 @@ func main() {
 	flag.Parse()
 
 	// default behavior of wc
-	if !countBytes && !countLines && !countWords && !countChars {
+	if !(countBytes || countChars || countLines || countWords) {
 		countBytes = true
 		countLines = true
 		countWords = true
 	}
 
-	var result Result
-	if len(flag.Args()) == 0 {
-		row := GetFileStats("", os.Stdin)
-		result.Rows = append(result.Rows, row)
-	}
-
-	for _, filename := range flag.Args() {
-		file, err := os.Open(filename)
-		if err != nil {
-			os.Stderr.WriteString(err.Error())
-			break
-		}
-		defer file.Close()
-
-		row := GetFileStats(filename, file)
-		result.Rows = append(result.Rows, row)
-	}
+	result := Run(flag.Args())
 	fmt.Print(result.String())
 }
