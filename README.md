@@ -2,7 +2,7 @@
 
 This is my solution to the first problem in the [John Crickett's Coding Challenges](https://codingchallenges.fyi/challenges/challenge-wc/).
 
-It's a Go implementation of the Unix command line tool `wc`. 
+It's a Go implementation of the Unix command line tool `wc`.
 
 
 ## Setup
@@ -41,7 +41,7 @@ Usage of go-wc:
 $ go-wc test.txt
    7145   58164  342190 test.txt
 
-# Lines Count 
+# Lines Count
 $ go-wc -l test.txt
    7145 test.txt
 
@@ -49,11 +49,15 @@ $ go-wc -l test.txt
 $ go-wc -w test.txt
   58164 test.txt
 
-# Characters Count  
+# Characters Count
 $ go-wc -m test.txt
  339292 test.txt
 
 # Bytes Count
 $ go-wc -c test.txt
  342190 test.txt
+
+# Using stdin
+$ cat test.txt | go-wc
+   7145   58164  342190
 ```
