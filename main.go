@@ -5,68 +5,10 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"strings"
 	"unicode/utf8"
 )
-
-type DisplayMode uint32
-
-const (
-	LinesMode DisplayMode = 1 << iota
-	WordsMode
-	CharsMode
-	BytesMode
-	DefaultMode = LinesMode | WordsMode | BytesMode
-)
-
-type FileStats struct {
-	Bytes    int64
-	Lines    int64
-	Words    int64
-	Chars    int64
-	Filename string
-}
-type Result struct {
-	FilesStats []FileStats
-}
-
-func (r *Result) getColumnSize() int {
-	maxValue := int64(1)
-	for _, fs := range r.FilesStats {
-		maxValue = max(maxValue, fs.Bytes, fs.Lines, fs.Words, fs.Chars)
-	}
-	columnSize := (int)(math.Floor(math.Log10((float64)(maxValue)))) + 1
-	return columnSize
-}
-
-func (r *Result) Display(mode DisplayMode) string {
-	LinesMode := mode&LinesMode > 0
-	WordsMode := mode&WordsMode > 0
-	BytesMode := mode&BytesMode > 0
-	CharsMode := mode&CharsMode > 0
-
-	result := bytes.Buffer{}
-	columnSize := r.getColumnSize()
-
-	for _, fs := range r.FilesStats {
-		if LinesMode {
-			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Lines))
-		}
-		if WordsMode {
-			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Words))
-		}
-		if CharsMode {
-			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Chars))
-		}
-		if BytesMode {
-			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Bytes))
-		}
-		result.WriteString(fmt.Sprintf("%s\n", fs.Filename))
-	}
-	return result.String()
-}
 
 func GetFileStats(name string, f *os.File) FileStats {
 	var bytesCnt int64
@@ -107,32 +49,37 @@ func GetFileStats(name string, f *os.File) FileStats {
 	}
 }
 
-func Run(args []string) Result {
+func Run(cmdArgs []string) Result {
 	var result Result
-	if len(args) == 0 {
+
+	// no input ->
+	if len(cmdArgs) == 0 {
 		fs := GetFileStats("", os.Stdin)
 		result.FilesStats = append(result.FilesStats, fs)
-	} else {
-		for _, filename := range args {
-			file, err := os.Open(filename)
-			if err != nil {
-				os.Stderr.WriteString(err.Error())
-				break
-			}
-			defer file.Close()
-
-			fs := GetFileStats(filename, file)
-			result.FilesStats = append(result.FilesStats, fs)
-		}
+		return result
 	}
+
+	for _, filename := range cmdArgs {
+		file, err := os.Open(filename)
+		if err != nil {
+			os.Stderr.WriteString(err.Error())
+			break
+		}
+		defer file.Close()
+
+		fs := GetFileStats(filename, file)
+		result.FilesStats = append(result.FilesStats, fs)
+	}
+
 	return result
 }
 
 func main() {
-	bytesFlag := flag.Bool("c", false, "print the bytes ")
-	linesFlag := flag.Bool("l", false, "print the lines ")
-	wordsFlag := flag.Bool("w", false, "print the words ")
-	charsFlag := flag.Bool("m", false, "print the characters ")
+	bytesFlag := flag.Bool("c", false, "print the bytes")
+	linesFlag := flag.Bool("l", false, "print the lines")
+	wordsFlag := flag.Bool("w", false, "print the words")
+	charsFlag := flag.Bool("m", false, "print the characters")
+
 	flag.Parse()
 
 	var mode DisplayMode
