@@ -11,6 +11,16 @@ import (
 	"unicode/utf8"
 )
 
+type DisplayMode uint32
+
+const (
+	LinesMode DisplayMode = 1 << iota
+	WordsMode
+	CharsMode
+	BytesMode
+	DefaultMode = LinesMode | WordsMode | BytesMode
+)
+
 type FileStats struct {
 	Bytes    int64
 	Lines    int64
@@ -18,36 +28,39 @@ type FileStats struct {
 	Chars    int64
 	Filename string
 }
-
 type Result struct {
 	FilesStats []FileStats
 }
 
 func (r *Result) getColumnSize() int {
-	var maxValue int64
+	maxValue := int64(1)
 	for _, fs := range r.FilesStats {
-		maxValue = max(fs.Bytes, fs.Lines, fs.Words, fs.Chars)
+		maxValue = max(maxValue, fs.Bytes, fs.Lines, fs.Words, fs.Chars)
 	}
-	// to avoid -inf values when maxValue is 0
-	maxValue = max(maxValue, 1)
-	colSize := (int)(math.Floor(math.Log10((float64)(maxValue)))) + 1
-	return colSize
+	columnSize := (int)(math.Floor(math.Log10((float64)(maxValue)))) + 1
+	return columnSize
 }
 
-func (r *Result) String() string {
+func (r *Result) Display(mode DisplayMode) string {
+	LinesMode := mode&LinesMode > 0
+	WordsMode := mode&WordsMode > 0
+	BytesMode := mode&BytesMode > 0
+	CharsMode := mode&CharsMode > 0
+
 	result := bytes.Buffer{}
 	columnSize := r.getColumnSize()
+
 	for _, fs := range r.FilesStats {
-		if countLines {
+		if LinesMode {
 			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Lines))
 		}
-		if countWords {
+		if WordsMode {
 			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Words))
 		}
-		if countChars {
+		if CharsMode {
 			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Chars))
 		}
-		if countBytes {
+		if BytesMode {
 			result.WriteString(fmt.Sprintf("%*d ", columnSize, fs.Bytes))
 		}
 		result.WriteString(fmt.Sprintf("%s\n", fs.Filename))
@@ -56,10 +69,10 @@ func (r *Result) String() string {
 }
 
 func GetFileStats(name string, f *os.File) FileStats {
-	var bytesCount int64
-	var linesCount int64
-	var wordsCount int64
-	var charsCount int64
+	var bytesCnt int64
+	var linesCnt int64
+	var wordsCnt int64
+	var charsCnt int64
 
 	locale := os.Getenv("LC_CTYPE")
 	if locale == "" {
@@ -72,24 +85,24 @@ func GetFileStats(name string, f *os.File) FileStats {
 	r := bufio.NewReader(f)
 	for {
 		data, err := r.ReadBytes('\n')
-		bytesCount += int64(len(data))
-		wordsCount += int64(len(bytes.Fields(data)))
+		bytesCnt += int64(len(data))
+		wordsCnt += int64(len(bytes.Fields(data)))
 		if isMultiBytes {
-			charsCount += int64(utf8.RuneCount(data))
+			charsCnt += int64(utf8.RuneCount(data))
 		} else {
-			charsCount += 1
+			charsCnt += 1
 		}
 		if err != nil {
 			break
 		}
-		linesCount += 1
+		linesCnt += 1
 	}
 
 	return FileStats{
-		Lines:    linesCount,
-		Words:    wordsCount,
-		Chars:    charsCount,
-		Bytes:    bytesCount,
+		Lines:    linesCnt,
+		Words:    wordsCnt,
+		Chars:    charsCnt,
+		Bytes:    bytesCnt,
 		Filename: name,
 	}
 }
@@ -115,25 +128,32 @@ func Run(args []string) Result {
 	return result
 }
 
-var countBytes bool
-var countLines bool
-var countWords bool
-var countChars bool
-
 func main() {
-	flag.BoolVar(&countBytes, "c", false, "print the bytes count")
-	flag.BoolVar(&countLines, "l", false, "print the lines count")
-	flag.BoolVar(&countWords, "w", false, "print the words count")
-	flag.BoolVar(&countChars, "m", false, "print the characters count")
+	bytesFlag := flag.Bool("c", false, "print the bytes ")
+	linesFlag := flag.Bool("l", false, "print the lines ")
+	wordsFlag := flag.Bool("w", false, "print the words ")
+	charsFlag := flag.Bool("m", false, "print the characters ")
 	flag.Parse()
 
+	var mode DisplayMode
+	if *linesFlag {
+		mode |= LinesMode
+	}
+	if *wordsFlag {
+		mode |= WordsMode
+	}
+	if *charsFlag {
+		mode |= CharsMode
+	}
+	if *bytesFlag {
+		mode |= BytesMode
+	}
+
 	// default behavior of wc
-	if !(countBytes || countChars || countLines || countWords) {
-		countBytes = true
-		countLines = true
-		countWords = true
+	if mode == 0 {
+		mode = DefaultMode
 	}
 
 	result := Run(flag.Args())
-	fmt.Print(result.String())
+	fmt.Print(result.Display(mode))
 }
